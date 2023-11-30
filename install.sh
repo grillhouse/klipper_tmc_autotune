@@ -6,19 +6,19 @@ AUTOTUNETMC_PATH="${HOME}/klipper_tmc_autotune"
 set -eu
 export LC_ALL=C
 
-
 function preflight_checks {
     if [ "$EUID" -eq 0 ]; then
         echo "[PRE-CHECK] This script must not be run as root!"
         exit -1
     fi
 
-    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F 'klipper.service')" ]; then
-        printf "[PRE-CHECK] Klipper service found! Continuing...\n\n"
-    else
+    # Check for klipper.service or klipper-*.service
+    klipper_services=$(sudo systemctl list-units --full -all -t service --no-legend | grep -E 'klipper.service|klipper-.*\.service' | awk '{print $1}')
+    if [ -z "$klipper_services" ]; then
         echo "[ERROR] Klipper service not found, please install Klipper first!"
         exit -1
     fi
+    echo "[PRE-CHECK] Klipper service(s) found! Continuing..."
 }
 
 function check_download {
@@ -30,13 +30,13 @@ function check_download {
         echo "[DOWNLOAD] Downloading Autotune TMC repository..."
         if git -C $autotunedirname clone https://github.com/andrewmcgr/klipper_tmc_autotune.git $autotunebasename; then
             chmod +x ${AUTOTUNETMC_PATH}/install.sh
-            printf "[DOWNLOAD] Download complete!\n\n"
+            echo "[DOWNLOAD] Download complete!"
         else
             echo "[ERROR] Download of Autotune TMC git repository failed!"
             exit -1
         fi
     else
-        printf "[DOWNLOAD] Autotune TMC repository already found locally. Continuing...\n\n"
+        echo "[DOWNLOAD] Autotune TMC repository already found locally. Continuing..."
     fi
 }
 
@@ -48,15 +48,16 @@ function link_extension {
 }
 
 function restart_klipper {
-    echo "[POST-INSTALL] Restarting Klipper..."
-    sudo systemctl restart klipper
+    echo "[POST-INSTALL] Restarting Klipper services..."
+    for service in $klipper_services; do
+        sudo systemctl restart "$service"
+        echo "Restarted $service"
+    done
 }
-
 
 printf "\n======================================\n"
 echo "- Autotune TMC install script -"
 printf "======================================\n\n"
-
 
 # Run steps
 preflight_checks
